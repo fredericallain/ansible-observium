@@ -1,0 +1,9 @@
+---
+
+- hosts: observium
+  gather_facts: true
+  become: true
+  roles:
+    - role: lamp_install
+    - role: mysql_secure_installation
+    - role: observium_install

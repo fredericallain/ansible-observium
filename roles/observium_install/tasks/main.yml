@@ -1,0 +1,185 @@
+---
+
+- name: Setup Observium Database
+  community.mysql.mysql_user:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    login_password: "{{ new_mysql_root_pass }}"
+    name: '{{ observium_db_user }}'
+    password: "{{ observium_db_password }}"
+    priv: '*.*:ALL,GRANT'
+    state: present
+
+- name: create a new database
+  community.mysql.mysql_db:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    login_password: "{{ new_mysql_root_pass }}"
+    name: "{{ observium_db_user }}"
+    state: present
+
+- name: Create Observium user
+  ansible.builtin.user:
+    name: observium
+    createhome: false
+    home: /opt/observium
+    system: true
+    state: present
+
+- name: Add www-data to observium group
+  ansible.builtin.command: 'usermod -aG observium www-data'
+  changed_when: false
+
+- name: Wget and unzip latest observium in /opt/observium
+  ansible.builtin.unarchive:
+    src: http://www.observium.org/observium-community-latest.tar.gz
+    dest: /opt/
+    remote_src: yes
+    owner: observium
+    group: observium
+    mode: '0775'
+
+- name: Create /opt/observium/rrd directory
+  ansible.builtin.file:
+    path: /opt/observium/rrd
+    owner: observium
+    group: observium
+    mode: '0755'
+    state: directory
+
+- name: Create /opt/observium/logs directory
+  ansible.builtin.file:
+    path: /opt/observium/logs
+    owner: observium
+    group: observium
+    mode: '0755'
+    state: directory
+
+- name: Setup config file
+  ansible.builtin.template:
+    src: "config.php.j2"
+    dest: "/opt/observium/config.php"
+    owner: observium
+    group: observium
+    mode: '0775'
+
+- name: Setup default MySQL database schema
+  ansible.builtin.command: 'php /opt/observium/discovery.php -u'
+
+- name: Setup password for observium GUI
+  ansible.builtin.command: 'php /opt/observium/adduser.php admin {{ observium_admin_pass }} 10'
+
+- name: Set up Apache virtuahHost
+  ansible.builtin.template:
+    src: "observium.conf.j2"
+    dest: "/etc/apache2/sites-available/observium.conf"
+
+- name: Enable observium apache
+  ansible.builtin.command: /usr/sbin/a2ensite observium.conf
+
+- name: Disable default Apache site
+  ansible.builtin.command: /usr/sbin/a2dissite 000-default.conf
+  notify: Restart apache2
+
+- name: Setup cronjob Run a complete discovery of all devices once every 6 hours
+  ansible.builtin.cron:
+    name: "Observium"
+    state: present
+    minute: "33"
+    hour: "6"
+    day: "*"
+    month: "*"
+    weekday: "*"
+    user: root
+    job: '/opt/observium/discovery.php -h all >> /dev/null 2>&1g'
+    cron_file: observium1
+
+- name: Setup cronjob Run automated discovery of newly added devices every 5 minutes
+  ansible.builtin.cron:
+    name: "Observium"
+    state: present
+    minute: "/5"
+    hour: "*"
+    day: "*"
+    month: "*"
+    weekday: "*"
+    user: root
+    job: '/opt/observium/discovery.php -h new >> /dev/null 2>&1'
+    cron_file: observium2
+
+- name: Setup cronjob Run multithreaded poller wrapper every 5 minutes
+  ansible.builtin.cron:
+    name: "Observium"
+    state: present
+    minute: "/5"
+    hour: "*"
+    day: "*"
+    month: "*"
+    weekday: "*"
+    user: root
+    job: '/opt/observium/poller-wrapper.py >> /dev/null 2>&1'
+    cron_file: observium3
+
+- name: Setup cronjob Run housekeeping script daily for syslog, eventlog and alert log
+  ansible.builtin.cron:
+    name: "Observium"
+    state: present
+    minute: "/5"
+    hour: "*"
+    day: "*"
+    month: "*"
+    weekday: "*"
+    user: root
+    job: '/opt/observium/housekeeping.php -ysel >> /dev/null 2>&1'
+    cron_file: observium4
+
+- name: Setup cronjob Run housekeeping script daily for rrds, ports, orphaned entries in the database and performance data
+  ansible.builtin.cron:
+    name: "Observium"
+    state: present
+    minute: "/5"
+    hour: "*"
+    day: "*"
+    month: "*"
+    weekday: "*"
+    user: root
+    job: '/opt/observium/housekeeping.php -yrptb >> /dev/null 2>&1'
+    cron_file: observium5
+
+- name: Add device from dictionnary
+  ansible.builtin.command: php /opt/observium/add_device.php {{ item }}
+  with_items:
+    - 10.0.0.30
+    - 10.0.0.31
+    - 10.0.0.25
+    - 10.0.0.32
+    - 10.0.0.33
+    - 10.100.0.156
+    - 10.0.0.38
+    - 10.0.0.15
+    - 10.0.0.16
+    - 10.0.0.39
+    - 10.0.0.34
+    - 10.0.0.35
+    - 10.0.0.36
+    - 10.0.0.37
+    - 10.0.0.31
+    - 10.100.0.248
+    - 10.0.0.40
+    - 10.0.0.41
+    - 10.0.0.42
+    - 10.0.0.43
+    - 10.0.0.57
+    - 10.0.0.253
+    - 10.0.0.240
+    - 10.0.0.241
+    - 10.0.0.242
+    - 10.0.0.243
+
+- name: Execute cronjob first time
+  ansible.builtin.shell: |
+    php /opt/observium/discovery.php -h all
+    php /opt/observium/discovery.php -h new
+    python3 /opt/observium/poller-wrapper.py
+    php /opt/observium/housekeeping.php -ysel
+    php /opt/observium/housekeeping.php -yrptb

@@ -1,0 +1,19 @@
+---
+- name: Restart apache2
+  ansible.builtin.service:
+    name: apache2
+    state: restarted
+
+- name: Restart php7.8-fpm
+  ansible.builtin.service:
+    name: php8.0-fpm
+    state: restarted
+
+- name: Restart mariadb
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+    wit_items:
+      - mariadb
+      - mysql
+      - mysqld

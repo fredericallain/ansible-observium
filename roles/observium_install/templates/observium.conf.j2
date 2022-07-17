@@ -1,0 +1,25 @@
+<VirtualHost *:80>
+    ServerAdmin {{ observium_admin_email }}
+    ServerName {{ observium_url }}
+
+    DocumentRoot /opt/observium/html
+
+    <FilesMatch \.php$>
+        SetHandler "proxy:unix:/var/run/php/php7.4-fpm.sock|fcgi://localhost"
+    </FilesMatch>
+
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+
+    <Directory /opt/observium/html/>
+        DirectoryIndex index.php
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog ${APACHE_LOG_DIR}/matomo_error.log
+    CustomLog ${APACHE_LOG_DIR}/matomo_access.log combined
+</VirtualHost>

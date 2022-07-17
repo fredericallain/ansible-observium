@@ -1,0 +1,38 @@
+---
+
+- name: 1. set mysql root pass
+  community.mysql.mysql_user:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    login_password: "{{ mysql_root_pass }}"
+    name: root
+    host_all: true
+    password: "{{ new_mysql_root_pass }}"
+
+- name: 2. disable remote root login
+  community.mysql.mysql_user:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    login_password: "{{ new_mysql_root_pass }}"
+    name: root
+    host: "{{ ansible_fqdn | lower }}"
+    state: absent
+
+- name: 3. remove anonymous users
+  community.mysql.mysql_user:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    login_password: "{{ new_mysql_root_pass }}"
+    name: ''
+    host_all: true
+    state: absent
+
+- name: 4. remove test database
+  community.mysql.mysql_db:
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    login_password: "{{ new_mysql_root_pass }}"
+    db: test
+    state: absent
+  register: remove_testdb
+  notify: Restart mariadb

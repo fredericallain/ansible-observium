@@ -1,0 +1,106 @@
+---
+
+- name: Install LAMP
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  with_items:
+    - apache2
+    - libapache2-mod-php7.4
+    - php7.4-cli
+    - php7.4-mysql
+    - php7.4-gd
+    - php7.4-json
+    - php7.4-bcmath
+    - php7.4-mbstring
+    - php7.4-opcache
+    - php7.4-apcu
+    - php7.4-curl
+    - php7.4-fpm
+    - php-pear
+    - snmp
+    - fping
+    - rrdtool
+    - whois
+    - mariadb-server
+    - mariadb-client
+    - subversion
+    - mtr-tiny
+    - ipmitool
+    - graphviz
+    - imagemagick
+    - python3-mysqldb
+    - python3-pymysql
+    - python-is-python3
+    - python3
+    - python3-pip
+
+- name: Enable service apache2 and mariadb
+  ansible.builtin.service:
+    name: "{{ item }}"
+    enabled: true
+  with_items:
+    - apache2
+    - mariadb
+  changed_when: false
+
+- name: Enable the Apache2 module
+  community.general.apache2_module:
+    name: "{{ item }}"  
+    state: present
+  with_items:
+    - headers
+    - rewrite
+    - proxy
+    - proxy_fcgi
+    - ssl
+    - http2
+    - expires
+
+- name: Install PyMySQL python package
+  ansible.builtin.pip:
+    name: PyMySQL
+
+- name: disable php7.4
+  ansible.builtin.command: "a2dismod php7.4"
+  changed_when: false
+
+- name: enable php7.4-fpm
+  ansible.builtin.command: "a2enconf php7.4-fpm"
+  changed_when: false
+
+- name: disable mpm_prefork
+  ansible.builtin.command: "a2dismod mpm_prefork"
+  changed_when: false
+
+- name: enable mpm_event
+  ansible.builtin.command: "a2enmod mpm_event"
+  changed_when: false
+
+- name: Copy security config
+  ansible.builtin.template:
+    src: "security.conf.j2"
+    dest: "/etc/apache2/conf-available/security.conf"
+    owner: root
+    group: root
+    mode: '0744'
+
+- name: Copy FPM php.ini
+  ansible.builtin.template:
+    src: "php.ini.j2"
+    dest: "/etc/php/7.4/fpm/php.ini"
+    owner: root
+    group: root
+    mode: '0744'
+  notify:
+    - Restart apache2
+    - Restart php7.4-fpm
+
+- name: Set my.cnf file
+  ansible.builtin.template: 
+    src: "my.cnf.j2" 
+    dest: "/etc/mysql/my.cnf"
+  notify:
+    - Restart mariadb
